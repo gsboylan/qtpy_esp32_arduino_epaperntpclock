@@ -21,7 +21,7 @@ void InlandEPD::init() {
 
 void InlandEPD::init_spi() {
     SPI.begin();
-    SPI.beginTransaction(SPISettings(4*1000*1000, MSBFIRST, SPI_MODE0));
+    SPI.beginTransaction(SPISettings(20*1000*1000, MSBFIRST, SPI_MODE0));
 
     pinMode(cs, OUTPUT);
     pinMode(dc, OUTPUT);

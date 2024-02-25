@@ -11,6 +11,9 @@
 #define DC_PIN      9
 #define CS_PIN      8
 
+#define UNCOLORED   0xFF
+#define COLORED     0x00
+
 Adafruit_NeoPixel pixels(NEOPIXELS, PIN_NEOPIXEL, NEO_GRB + NEO_KHZ800);
 InlandEPD epd(CS_PIN, DC_PIN, RST_PIN, BUSY_PIN);
 Paint paint(epd.buffer.data(), EPD_WIDTH, EPD_HEIGHT);
@@ -18,8 +21,6 @@ Paint paint(epd.buffer.data(), EPD_WIDTH, EPD_HEIGHT);
 int text_row = 1;
 
 void printline(const char* line, int x = 0);
-
-bool bw = true;
 
 
 void setup() {
@@ -40,7 +41,7 @@ void setup() {
 }
 
 void loop() {
-    printline("Hello!", 30);
+    printline("Hello!");
     // if (bw) {
     //     // std::fill(epd.buffer.begin(), epd.buffer.end(), 0x00);
     //     paint.Clear(0x00);
@@ -51,18 +52,18 @@ void loop() {
     // bw = !bw;
     // epd.update_full();
 
-    pixels.fill(0xFF0000);
-    pixels.show();
-    delay(500);
+    // pixels.fill(0xFF0000);
+    // pixels.show();
+    // delay(500);
 
-    pixels.fill(0x00FF00);
-    pixels.show();
-    delay(500);
+    // pixels.fill(0x00FF00);
+    // pixels.show();
+    // delay(500);
 
-    pixels.fill(0x0000FF);
-    pixels.show();
+    // pixels.fill(0x0000FF);
+    // pixels.show();
 
-    delay(2000);
+    // delay(2000);
 }
 
 void printline(const char* line, int x) {
@@ -74,7 +75,7 @@ void printline(const char* line, int x) {
     text_row++;
 
     Serial.println(line);
-    paint.DrawStringAt(x, y, line, &Font24, 0x00);
+    paint.DrawStringAt(x, y, line, &Font24, COLORED);
     epd.update_partial();
     // epd.update_full();
 }
