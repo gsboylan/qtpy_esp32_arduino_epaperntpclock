@@ -106,7 +106,7 @@ void InlandEPD::update_full() {
     this->wait_until_idle();
 }
 
-void InlandEPD::update_partial() {
+void InlandEPD::update_partial(bool twice) {
     this->update_common();
 
     this->command(WRITE_LUT_REGISTER, PART_UPDATE_LUT_TTGO_DKE);
@@ -130,8 +130,12 @@ void InlandEPD::update_partial() {
     this->command(MASTER_ACTIVATION);
     this->wait_until_idle();
 
-    // this->command(WRITE_RAM, buffer);
-    // this->command(DISPLAY_UPDATE_CONTROL_2, {0xCF});
-    // this->command(MASTER_ACTIVATION);
-    // this->wait_until_idle();
+    if (twice) {
+        this->command(WRITE_RAM, buffer);
+        this->command(DISPLAY_UPDATE_CONTROL_2, {0xCF});
+        this->command(MASTER_ACTIVATION);
+        this->wait_until_idle();
+    }
+
+    this->deep_sleep();
 }

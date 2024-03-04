@@ -29,7 +29,7 @@ class InlandEPD {
         void wipe();
 
         void update_full();
-        void update_partial();
+        void update_partial(bool twice = false);
 
         byteVector buffer;
 

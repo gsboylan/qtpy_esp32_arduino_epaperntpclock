@@ -13,6 +13,10 @@
     #error "Please define WIFI_SSID and WIFI_PASSWORD in platformio.ini"
 #endif
 
+#ifndef WAIT_FOR_HOST
+    #define WAIT_FOR_HOST false
+#endif
+
 // Neopixel
 #define NEOPIXELS   1
 Adafruit_NeoPixel pixels(NEOPIXELS, PIN_NEOPIXEL, NEO_GRB + NEO_KHZ800);
@@ -27,19 +31,55 @@ Adafruit_NeoPixel pixels(NEOPIXELS, PIN_NEOPIXEL, NEO_GRB + NEO_KHZ800);
 InlandEPD epd(CS_PIN, DC_PIN, RST_PIN, BUSY_PIN);
 Paint paint(epd.buffer.data(), EPD_WIDTH, EPD_HEIGHT);
 
-// Line by line printing
-int text_row = 1;
-void printline(const char* line, int x = 0);
-
 // Network
 WiFiUDP wifiUdp;
 NTP ntp(wifiUdp);
 
+// time and rendering
+tm human_time;
+timeval posix_timeval;
+
+void init(bool wait_for_host = true);
+bool attemptNtpUpdate();
+void fetchRtcTime();
+void render(bool fullUpdate);
+void printLine(const char* line, int x = 0);
+
 void setup() {
+    init(WAIT_FOR_HOST);
+
+    esp_sleep_source_t wakeup_reason = esp_sleep_get_wakeup_cause();
+    Serial.print("wakeup reason: ");
+    Serial.println(wakeup_reason);
+
+    if (wakeup_reason != ESP_SLEEP_WAKEUP_TIMER) {
+        Serial.println("Not awaking from deep sleep, will sync time");
+        attemptNtpUpdate();
+    } else {
+        Serial.println("Awake from deep sleep");
+    }
+
+    fetchRtcTime();
+    render(false);
+    // render(wakeup_reason != ESP_SLEEP_WAKEUP_TIMER);
+
+    fetchRtcTime();
+    int secondsremaining = 60 - human_time.tm_sec;
+
+    Serial.end();
+    Serial.flush();
+
+    esp_deep_sleep(secondsremaining * 1000 * 1000);
+}
+
+void loop() {}
+
+void init(bool wait_for_host) {
     Serial.begin(115200);
-    // Toggle this to wait for host connection
-    while (!Serial) {
-        ; // wait for connection
+    if (wait_for_host) {
+        while (!Serial) {
+            ; // wait for connection
+        }
     }
 
     pinMode(NEOPIXEL_POWER, OUTPUT);
@@ -53,73 +93,63 @@ void setup() {
     paint.SetRotate(ROTATE_90);
     paint.Clear(UNCOLORED);
     epd.init();
-    epd.update_full();
-
-
-    esp_sleep_source_t wakeup_reason = esp_sleep_get_wakeup_cause();
-    Serial.print("wakeup reason: ");
-    Serial.println(wakeup_reason);
 
     setenv("TZ", "EST5EDT,M3.2.0/2,M11.1.0", 1);
     tzset();
+}
 
-    if (wakeup_reason != ESP_SLEEP_WAKEUP_TIMER) {
-        Serial.println("Not awaking from deep sleep, will sync time");
-
-        WiFi.persistent(false);
-        WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
-        while (WiFi.status() != WL_CONNECTED) {
-            Serial.print(".");
-            delay(250);
-        }
-        Serial.println("Connected.");
-
-        Serial.println("Start NTP...");
-        ntp.begin("pool.ntp.org");
-        ntp.stop();
-        Serial.println(ntp.formattedTime("Got UTC time: %c"));
-
-        timeval tv;
-        tv.tv_sec = ntp.utc();
-        settimeofday(&tv, NULL);
-
-        WiFi.disconnect(true, true);
-        Serial.println("Disconnected and powered off radio");
-    } else {
-        Serial.println("Awake from deep sleep");
+bool attemptNtpUpdate() {
+    WiFi.persistent(false);
+    WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
+    while (WiFi.status() != WL_CONNECTED) {
+    Serial.print(".");
+    delay(250);
     }
+    Serial.println("Connected.");
 
-    timeval tv;
-    gettimeofday(&tv, NULL);
+    Serial.println("Start NTP...");
+    ntp.begin("pool.ntp.org");
+    ntp.stop();
+    Serial.println(ntp.formattedTime("Got UTC time: %c"));
 
-    tm timeinfo;
-    localtime_r(&tv.tv_sec, &timeinfo);
+    WiFi.disconnect(true, true);
+    Serial.println("Disconnected and powered off radio");
+
+    posix_timeval.tv_sec = ntp.utc();
+    settimeofday(&posix_timeval, NULL);
+
+    return true;
+}
+
+void fetchRtcTime() {
+    gettimeofday(&posix_timeval, NULL);
+    localtime_r(&posix_timeval.tv_sec, &human_time);
+}
+
+void render(bool fullUpdate) {
+    if (!fullUpdate) epd.update_partial(true);
 
     char timeString[15];
-    strftime(timeString, sizeof(timeString), "%I:%M:%S", &timeinfo);
-    printline(timeString);
+    strftime(timeString, sizeof(timeString), "%I:%M:%S", &human_time);
+    printLine(timeString);
 
-    int secondsremaining = 60 - timeinfo.tm_sec;
-
-    Serial.end();
-    Serial.flush();
-
-    esp_deep_sleep(secondsremaining * 1000 * 1000);
+    if (fullUpdate) {
+        epd.update_full();
+    } else {
+        epd.update_partial(false);
+    }
 }
 
-void loop() {
-}
-
+int text_row = 1;
 static const int FONT_HEIGHT_PX = 18;
-void printline(const char* line, int x) {
+void printLine(const char* line, int x) {
     if (text_row >= (EPD_WIDTH / FONT_HEIGHT_PX)) {
         text_row = 1;
-        epd.wipe();
+        paint.Clear(UNCOLORED);
     }
     int y = text_row * FONT_HEIGHT_PX - FONT_HEIGHT_PX/2;
     text_row++;
 
     Serial.println(line);
     paint.DrawStringAt(x, y, line, &Font24, COLORED);
-    epd.update_partial();
 }
