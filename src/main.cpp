@@ -8,6 +8,7 @@
 #include "NTP.h"
 #include "time.h"
 #include "esp_sntp.h"
+#include "timeformat.hpp"
 
 #if !(defined(WIFI_SSID) && defined(WIFI_PASSWORD))
     #error "Please define WIFI_SSID and WIFI_PASSWORD in platformio.ini"
@@ -42,8 +43,8 @@ timeval posix_timeval;
 void init(bool wait_for_host = true);
 bool attemptNtpUpdate();
 void fetchRtcTime();
-void render(bool fullUpdate);
-void printLine(const char* line, int x = 0);
+int render(bool fullUpdate);
+void printLine(std::string line, int x = 0);
 
 void setup() {
     init(WAIT_FOR_HOST);
@@ -60,14 +61,15 @@ void setup() {
     }
 
     fetchRtcTime();
-    render(false);
-    // render(wakeup_reason != ESP_SLEEP_WAKEUP_TIMER);
+    // int next_refresh = render(false);
+    int next_refresh = render(wakeup_reason != ESP_SLEEP_WAKEUP_TIMER);
+
+    Serial.flush();
+    Serial.end();
 
     fetchRtcTime();
     int secondsremaining = 60 - human_time.tm_sec;
-
-    Serial.end();
-    Serial.flush();
+    secondsremaining += (next_refresh - human_time.tm_min) * 60;
 
     esp_deep_sleep(secondsremaining * 1000 * 1000);
 }
@@ -102,8 +104,8 @@ bool attemptNtpUpdate() {
     WiFi.persistent(false);
     WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
     while (WiFi.status() != WL_CONNECTED) {
-    Serial.print(".");
-    delay(250);
+        Serial.print(".");
+        delay(250);
     }
     Serial.println("Connected.");
 
@@ -126,30 +128,182 @@ void fetchRtcTime() {
     localtime_r(&posix_timeval.tv_sec, &human_time);
 }
 
-void render(bool fullUpdate) {
+bool inRange(int query, int lower_inclusive, int upper_exclusive) {
+    return (query >= lower_inclusive) && (query < upper_exclusive);
+}
+
+std::vector<std::string> chopToFit(std::string sentence, int max_chars = 18) {
+    std::vector<std::string> lines;
+
+    Serial.println(("chopping sentence: \"" + sentence + "\"").c_str());
+
+    if (sentence.length() < max_chars) {
+        lines.push_back(sentence);
+    } else {
+        int start = 0;
+
+        while (start < sentence.length()) {
+            Serial.println(sentence.substr(start).c_str( ));
+
+            // advance past leading spaces
+            while (sentence[start] == ' ') {
+                if (start >= sentence.length()) {
+                    break;
+                }
+
+                start++;
+            }
+
+            int end;
+            if (start + max_chars > sentence.length()) {
+                end = sentence.length();
+            } else {
+                end = start + max_chars;
+
+                // look backwards from the end for a word boundary
+                while (end > start && sentence[end] != ' ') {
+                    end--;
+                }
+
+                if (end == start) {
+                    break;
+                }
+
+            }
+
+            // exclude the trailing space
+            lines.push_back(sentence.substr(start, end - start));
+
+            // advance past trailing space
+            start = end;
+        }
+
+    }
+
+    Serial.println("Chopped sentence: ");
+    for (int i = 0; i < lines.size(); i++) {
+        Serial.print("\t");
+        Serial.println(lines[i].c_str());
+    }
+
+    return lines;
+}
+
+
+int render(bool fullUpdate) {
     if (!fullUpdate) epd.update_partial(true);
 
-    char timeString[15];
-    strftime(timeString, sizeof(timeString), "%I:%M:%S", &human_time);
-    printLine(timeString);
+    std::string sentence_time = "it's ";
+    sentence_time.reserve(255);
+
+    int minute = human_time.tm_min;
+    if (inRange(minute, 4, 57)) {
+        sentence_time += "about ";
+    }
+
+    int next_refresh;
+    if (inRange(minute, 0, 4)) {
+        sentence_time += "just after ";
+        next_refresh = 4;
+    } else if (inRange(minute, 4, 7)) {
+        sentence_time += "five ";
+        next_refresh = 7;
+    } else if (inRange(minute, 7, 14)) {
+        sentence_time += "ten ";
+        next_refresh = 14;
+    } else if (inRange(minute, 14, 17)) {
+        sentence_time += "quarter ";
+        next_refresh = 17;
+    } else if (inRange(minute, 17, 24)) {
+        sentence_time += "twenty ";
+        next_refresh = 24;
+    } else if (inRange(minute, 24, 27)) {
+        sentence_time += "twenty-five ";
+        next_refresh = 27;
+    } else if (inRange(minute, 27, 34)) {
+        sentence_time += "half ";
+        next_refresh = 34;
+    } else if (inRange(minute, 34, 37)) {
+        sentence_time += "thirty-five ";
+        next_refresh = 37;
+    } else if (inRange(minute, 37, 44)) {
+        sentence_time += "twenty ";
+        next_refresh = 44;
+    } else if (inRange(minute, 44, 47)) {
+        sentence_time += "quarter ";
+        next_refresh = 47;
+    } else if (inRange(minute, 47, 54)) {
+        sentence_time += "ten ";
+        next_refresh = 54;
+    } else if (inRange(minute, 54, 57)) {
+        sentence_time += "five ";
+        next_refresh = 57;
+    } else {
+        sentence_time += "almost ";
+        next_refresh = 60;
+    }
+
+    if (inRange(minute, 4, 37)) {
+        sentence_time += "past ";
+    }
+
+    if (inRange(minute, 37, 57)) {
+        sentence_time += "to ";
+    }
+
+    if (inRange(minute, 0, 37)) {
+        sentence_time += hours_to_strings[human_time.tm_hour];
+    } else {
+        sentence_time += hours_to_strings[(human_time.tm_hour + 1) % 24];
+    }
+
+    if (inRange(human_time.tm_hour, 0, 1)) {
+        // pass - midnight
+    } else if (inRange(human_time.tm_hour, 1, 12)) {
+        sentence_time += "in the morning ";
+    } else if (inRange(human_time.tm_hour, 12, 13)) {
+        // pass - noon
+    } else if (inRange(human_time.tm_hour, 13, 17)) {
+        sentence_time += "in the afternoon ";
+    } else if (inRange(human_time.tm_hour, 17, 19)) {
+        sentence_time += "in the evening ";
+    } else if (inRange(human_time.tm_hour, 19, 23)) {
+        sentence_time += "at night ";
+    } else {
+        // pass - midnight
+    }
+
+    sentence_time += "on ";
+    sentence_time += days_to_strings[human_time.tm_wday];
+    sentence_time += months_to_strings[human_time.tm_mon];
+    sentence_time += day_to_ordinal[human_time.tm_mday - 1];
+    sentence_time += '.';
+
+    auto lines = chopToFit(sentence_time);
+
+    for (int i = 0; i < lines.size(); i++) {
+        printLine(lines[i]);
+    }
 
     if (fullUpdate) {
         epd.update_full();
     } else {
         epd.update_partial(false);
     }
+
+    return next_refresh;
 }
 
 int text_row = 1;
-static const int FONT_HEIGHT_PX = 18;
-void printLine(const char* line, int x) {
-    if (text_row >= (EPD_WIDTH / FONT_HEIGHT_PX)) {
-        text_row = 1;
-        paint.Clear(UNCOLORED);
-    }
+static const int FONT_HEIGHT_PX = 16;
+void printLine(std::string line, int x) {
+    // if (text_row >= (EPD_WIDTH / FONT_HEIGHT_PX)) {
+    //     text_row = 1;
+    //     paint.Clear(UNCOLORED);
+    // }
     int y = text_row * FONT_HEIGHT_PX - FONT_HEIGHT_PX/2;
     text_row++;
 
-    Serial.println(line);
-    paint.DrawStringAt(x, y, line, &Font24, COLORED);
+    Serial.println(line.c_str());
+    paint.DrawStringAt(x, y, line.c_str(), &Font20, COLORED);
 }
