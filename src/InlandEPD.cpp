@@ -104,6 +104,8 @@ void InlandEPD::update_full() {
     this->command(WRITE_RAM, buffer);
     this->command(MASTER_ACTIVATION);
     this->wait_until_idle();
+
+    this->deep_sleep();
 }
 
 void InlandEPD::update_partial(bool twice) {
