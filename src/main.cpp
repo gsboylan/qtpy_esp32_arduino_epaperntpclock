@@ -32,6 +32,9 @@ Adafruit_NeoPixel pixels(NEOPIXELS, PIN_NEOPIXEL, NEO_GRB + NEO_KHZ800);
 InlandEPD epd(CS_PIN, DC_PIN, RST_PIN, BUSY_PIN);
 Paint paint(epd.buffer.data(), EPD_WIDTH, EPD_HEIGHT);
 
+static const int FONT_HEIGHT_PX = Font20.Height - 4;
+static const int FONT_WIDTH_PX = Font20.Width;
+
 // Network
 WiFiUDP wifiUdp;
 NTP ntp(wifiUdp);
@@ -44,7 +47,9 @@ void init(bool wait_for_host = true);
 bool attemptNtpUpdate();
 void fetchRtcTime();
 int render(bool fullUpdate);
-void printLine(std::string line, int x = 0);
+void printLine(std::string line, int x = 0, int y_adj = 0);
+bool inRange(int query, int lower_inclusive, int upper_exclusive);
+std::vector<std::string> chopToFit(std::string sentence, int max_chars = 18);
 
 void setup() {
     init(WAIT_FOR_HOST);
@@ -69,7 +74,7 @@ void setup() {
 
     fetchRtcTime();
     int secondsremaining = 60 - human_time.tm_sec;
-    secondsremaining += (next_refresh - human_time.tm_min) * 60;
+    secondsremaining += (next_refresh - human_time.tm_min - 1) * 60;
 
     esp_deep_sleep(secondsremaining * 1000 * 1000);
 }
@@ -132,7 +137,7 @@ bool inRange(int query, int lower_inclusive, int upper_exclusive) {
     return (query >= lower_inclusive) && (query < upper_exclusive);
 }
 
-std::vector<std::string> chopToFit(std::string sentence, int max_chars = 18) {
+std::vector<std::string> chopToFit(std::string sentence, int max_chars) {
     std::vector<std::string> lines;
 
     Serial.println(("chopping sentence: \"" + sentence + "\"").c_str());
@@ -206,37 +211,37 @@ int render(bool fullUpdate) {
         sentence_time += "just after ";
         next_refresh = 4;
     } else if (inRange(minute, 4, 7)) {
-        sentence_time += "five ";
+        sentence_time += "five minutes ";
         next_refresh = 7;
     } else if (inRange(minute, 7, 14)) {
-        sentence_time += "ten ";
+        sentence_time += "ten minutes ";
         next_refresh = 14;
     } else if (inRange(minute, 14, 17)) {
         sentence_time += "quarter ";
         next_refresh = 17;
     } else if (inRange(minute, 17, 24)) {
-        sentence_time += "twenty ";
+        sentence_time += "twenty minutes ";
         next_refresh = 24;
     } else if (inRange(minute, 24, 27)) {
-        sentence_time += "twenty-five ";
+        sentence_time += "twenty-five minutes ";
         next_refresh = 27;
     } else if (inRange(minute, 27, 34)) {
         sentence_time += "half ";
         next_refresh = 34;
     } else if (inRange(minute, 34, 37)) {
-        sentence_time += "thirty-five ";
+        sentence_time += "thirty-five minutes ";
         next_refresh = 37;
     } else if (inRange(minute, 37, 44)) {
-        sentence_time += "twenty ";
+        sentence_time += "twenty minutes ";
         next_refresh = 44;
     } else if (inRange(minute, 44, 47)) {
         sentence_time += "quarter ";
         next_refresh = 47;
     } else if (inRange(minute, 47, 54)) {
-        sentence_time += "ten ";
+        sentence_time += "ten minutes ";
         next_refresh = 54;
     } else if (inRange(minute, 54, 57)) {
-        sentence_time += "five ";
+        sentence_time += "five minutes ";
         next_refresh = 57;
     } else {
         sentence_time += "almost ";
@@ -265,9 +270,9 @@ int render(bool fullUpdate) {
         // pass - noon
     } else if (inRange(human_time.tm_hour, 13, 17)) {
         sentence_time += "in the afternoon ";
-    } else if (inRange(human_time.tm_hour, 17, 19)) {
+    } else if (inRange(human_time.tm_hour, 17, 20)) {
         sentence_time += "in the evening ";
-    } else if (inRange(human_time.tm_hour, 19, 23)) {
+    } else if (inRange(human_time.tm_hour, 20, 23)) {
         sentence_time += "at night ";
     } else {
         // pass - midnight
@@ -279,29 +284,33 @@ int render(bool fullUpdate) {
     sentence_time += day_to_ordinal[human_time.tm_mday - 1];
     sentence_time += '.';
 
-    auto lines = chopToFit(sentence_time);
+    std::vector<std::string> lines = chopToFit(sentence_time);
+
+    int total_height = lines.size() * FONT_HEIGHT_PX;
+    int y_adj = (EPD_WIDTH - total_height - FONT_HEIGHT_PX) / 2;
 
     for (int i = 0; i < lines.size(); i++) {
-        printLine(lines[i]);
+        int line_width = FONT_WIDTH_PX * lines[i].length();
+        int x = (EPD_HEIGHT - line_width) / 2;
+        printLine(lines[i], x, y_adj);
     }
 
     if (fullUpdate) {
         epd.update_full();
     } else {
-        epd.update_partial(false);
+        epd.update_partial(true);
     }
 
     return next_refresh;
 }
 
 int text_row = 1;
-static const int FONT_HEIGHT_PX = 16;
-void printLine(std::string line, int x) {
-    // if (text_row >= (EPD_WIDTH / FONT_HEIGHT_PX)) {
-    //     text_row = 1;
-    //     paint.Clear(UNCOLORED);
-    // }
-    int y = text_row * FONT_HEIGHT_PX - FONT_HEIGHT_PX/2;
+void printLine(std::string line, int x, int y_adj) {
+    if (text_row >= (EPD_WIDTH / FONT_HEIGHT_PX)) {
+        text_row = 1;
+        paint.Clear(UNCOLORED);
+    }
+    int y = text_row * FONT_HEIGHT_PX - FONT_HEIGHT_PX/2 + y_adj;
     text_row++;
 
     Serial.println(line.c_str());
