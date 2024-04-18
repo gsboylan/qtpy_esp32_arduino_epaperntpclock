@@ -23,9 +23,9 @@
 Adafruit_NeoPixel pixels(NEOPIXELS, PIN_NEOPIXEL, NEO_GRB + NEO_KHZ800);
 
 // Inland epaper display
-#define BUSY_PIN    18
-#define RST_PIN     17
-#define DC_PIN      9
+#define BUSY_PIN    5
+#define RST_PIN     6
+#define DC_PIN      7
 #define CS_PIN      8
 #define UNCOLORED   0xFF
 #define COLORED     0x00
