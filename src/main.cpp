@@ -10,6 +10,8 @@
 #include "esp_sntp.h"
 #include "timeformat.hpp"
 
+#include "FontCommitMono20.h"
+
 #if !(defined(WIFI_SSID) && defined(WIFI_PASSWORD))
     #error "Please define WIFI_SSID and WIFI_PASSWORD in platformio.ini"
 #endif
@@ -32,8 +34,9 @@ Adafruit_NeoPixel pixels(NEOPIXELS, PIN_NEOPIXEL, NEO_GRB + NEO_KHZ800);
 InlandEPD epd(CS_PIN, DC_PIN, RST_PIN, BUSY_PIN);
 Paint paint(epd.buffer.data(), EPD_WIDTH, EPD_HEIGHT);
 
-static const int FONT_HEIGHT_PX = Font20.Height - 4;
-static const int FONT_WIDTH_PX = Font20.Width;
+extern sFONT FontCommitMono20;
+static const int FONT_HEIGHT_PX = FontCommitMono20.Height;
+static const int FONT_WIDTH_PX = FontCommitMono20.Width;
 
 // Network
 WiFiUDP wifiUdp;
@@ -306,13 +309,10 @@ int render(bool fullUpdate) {
 
 int text_row = 1;
 void printLine(std::string line, int x, int y_adj) {
-    if (text_row >= (EPD_WIDTH / FONT_HEIGHT_PX)) {
-        text_row = 1;
-        paint.Clear(UNCOLORED);
-    }
+
     int y = text_row * FONT_HEIGHT_PX - FONT_HEIGHT_PX/2 + y_adj;
     text_row++;
 
     Serial.println(line.c_str());
-    paint.DrawStringAt(x, y, line.c_str(), &Font20, COLORED);
+    paint.DrawStringAt(x, y, line.c_str(), &FontCommitMono20, COLORED);
 }
