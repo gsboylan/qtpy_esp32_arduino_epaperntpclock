@@ -66,11 +66,20 @@ void setup() {
         attemptNtpUpdate();
     } else {
         Serial.println("Awake from deep sleep");
+
+        if ((human_time.tm_hour == 0
+                || human_time.tm_hour == 5
+                || human_time.tm_hour == 11
+                || human_time.tm_hour == 17)
+                && human_time.tm_min == 0) {
+            Serial.println("Hit sync interval");
+            attemptNtpUpdate();
+        }
     }
 
     fetchRtcTime();
-    // int next_refresh = render(false);
     int next_refresh = render(wakeup_reason != ESP_SLEEP_WAKEUP_TIMER);
+
 
     Serial.flush();
     Serial.end();
@@ -210,7 +219,9 @@ int render(bool fullUpdate) {
     }
 
     int next_refresh;
-    if (inRange(minute, 0, 4)) {
+    if (inRange(minute, 0, 1)) {
+        next_refresh = 1;
+    } else if (inRange(minute, 1, 4)) {
         sentence_time += "just after ";
         next_refresh = 4;
     } else if (inRange(minute, 4, 7)) {
@@ -266,11 +277,11 @@ int render(bool fullUpdate) {
     }
 
     if (inRange(human_time.tm_hour, 0, 1)) {
-        // pass - midnight
+        //pass
     } else if (inRange(human_time.tm_hour, 1, 12)) {
         sentence_time += "in the morning ";
     } else if (inRange(human_time.tm_hour, 12, 13)) {
-        // pass - noon
+        //pass
     } else if (inRange(human_time.tm_hour, 13, 17)) {
         sentence_time += "in the afternoon ";
     } else if (inRange(human_time.tm_hour, 17, 20)) {
